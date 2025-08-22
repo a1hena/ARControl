@@ -1,8 +1,8 @@
 {
   "Name": "ARC",
-  "Author": "Liza Carvelli",
+  "Author": "Liza Carvelli, a1hena",
   "Punchline": "Better AutoRetainer Venture Planner",
   "Description": "",
-  "RepoUrl": "https://git.carvel.li/liza/ARControl",
-  "IconUrl": "https://plugins.carvel.li/icons/ARControl.png"
+  "RepoUrl": "https://github.com/a1hena/ARC",
+  "IconUrl": "https://raw.githubusercontent.com/a1hena/ARC/master/ARControl.png"
 }
