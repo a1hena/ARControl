@@ -1,25 +1,22 @@
 ﻿using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
-using ARControl.Internal;
 using AutoRetainerAPI;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using ECommons.Reflection;
 
 namespace ARControl.External;
 
-internal sealed class AutoRetainerReflection : IDisposable
+internal sealed class AutoRetainerReflection
 {
     private readonly IPluginLog _pluginLog;
     private readonly AutoRetainerApi _autoRetainerApi;
-    private readonly DalamudReflector _reflector;
 
-    public AutoRetainerReflection(IDalamudPluginInterface pluginInterface, IFramework framework,
-        IPluginLog pluginLog, AutoRetainerApi autoRetainerApi)
+    public AutoRetainerReflection(IPluginLog pluginLog, AutoRetainerApi autoRetainerApi)
     {
         _pluginLog = pluginLog;
         _autoRetainerApi = autoRetainerApi;
-        _reflector = new DalamudReflector(pluginInterface, framework, pluginLog);
     }
 
     [SuppressMessage("Performance", "CA2000", Justification = "Should not dispose other plugins")]
@@ -30,7 +27,7 @@ internal sealed class AutoRetainerReflection : IDisposable
             try
             {
                 if (_autoRetainerApi.Ready &&
-                    _reflector.TryGetDalamudPlugin("AutoRetainer", out var autoRetainer, false, true))
+                    DalamudReflector.TryGetDalamudPlugin("AutoRetainer", out var autoRetainer, false, true))
                 {
                     var config =
                         autoRetainer.GetType().GetProperty("C", BindingFlags.Static | BindingFlags.NonPublic)!
@@ -57,10 +54,5 @@ internal sealed class AutoRetainerReflection : IDisposable
                 return true;
             }
         }
-    }
-
-    public void Dispose()
-    {
-        _reflector.Dispose();
     }
 }

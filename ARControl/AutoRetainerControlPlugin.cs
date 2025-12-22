@@ -65,7 +65,7 @@ public sealed partial class AutoRetainerControlPlugin : IDalamudPlugin
 
         ECommonsMain.Init(_pluginInterface, this);
         _autoRetainerApi = new();
-        _autoRetainerReflection = new AutoRetainerReflection(pluginInterface, framework, pluginLog, _autoRetainerApi);
+        _autoRetainerReflection = new AutoRetainerReflection(pluginLog, _autoRetainerApi);
 
         _pluginInterface.UiBuilder.Draw += _windowSystem.Draw;
         _pluginInterface.UiBuilder.OpenConfigUi += _configWindow.Toggle;
@@ -446,7 +446,6 @@ public sealed partial class AutoRetainerControlPlugin : IDalamudPlugin
         _pluginInterface.UiBuilder.OpenConfigUi -= _configWindow.Toggle;
         _pluginInterface.UiBuilder.Draw -= _windowSystem.Draw;
 
-        _autoRetainerReflection.Dispose();
         _autoRetainerApi.Dispose();
         ECommonsMain.Dispose();
     }
