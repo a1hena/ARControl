@@ -11,14 +11,14 @@ using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
+using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using ECommons;
-using LLib.ImGui;
 
 namespace ARControl.Windows;
 
-internal sealed class ConfigWindow : LWindow
+internal sealed class ConfigWindow : Window
 {
     public const byte MinLevel = 10;
 
@@ -68,7 +68,7 @@ internal sealed class ConfigWindow : LWindow
 
     public float MainIndentSize { get; private set; } = 1;
 
-    public override void DrawContent()
+    public override void Draw()
     {
         using var tabBar = ImRaii.TabBar("ARConfigTabs");
         if (!tabBar)

@@ -4,11 +4,9 @@
         <OutputPath>dist</OutputPath>
     </PropertyGroup>
 
-    <Import Project="..\LLib\LLib.targets"/>
-    <Import Project="..\LLib\RenameZip.targets"/>
+    <Import Project="RenameZip.targets"/>
 
     <ItemGroup>
         <ProjectReference Include="..\AutoRetainerAPI\AutoRetainerAPI\AutoRetainerAPI.csproj" />
-        <ProjectReference Include="..\LLib\LLib.csproj"/>
     </ItemGroup>
 </Project>
