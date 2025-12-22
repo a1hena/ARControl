@@ -39,7 +39,6 @@ internal sealed class ConfigWindow : Window
         IClientState clientState,
         ICommandManager commandManager,
         ITextureProvider textureProvider,
-        DiscardHelperIpc discardHelperIpc,
         AllaganToolsIpc allaganToolsIpc,
         IPluginLog pluginLog)
         : base($"ARC {SeIconChar.Collectible.ToIconString()}###ARControlConfig")
@@ -51,7 +50,7 @@ internal sealed class ConfigWindow : Window
 
         _tabs =
         [
-            new VentureListTab(this, _configuration, gameCache, textureProvider, discardHelperIpc, pluginLog),
+            new VentureListTab(this, _configuration, gameCache, textureProvider, pluginLog),
             new CharacterGroupTab(this, _configuration),
             new RetainersTab(this, _configuration, textureProvider),
             new InventoryTab(_configuration, allaganToolsIpc, _gameCache, pluginLog),

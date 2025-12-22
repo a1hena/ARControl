@@ -56,11 +56,10 @@ public sealed partial class AutoRetainerControlPlugin : IDalamudPlugin
 
         _gameCache = new GameCache(dataManager);
         _ventureResolver = new VentureResolver(_gameCache, _pluginLog);
-        DiscardHelperIpc discardHelperIpc = new(_pluginInterface);
         _allaganToolsIpc = new AllaganToolsIpc(pluginInterface, pluginLog);
         _configWindow =
             new ConfigWindow(_pluginInterface, _configuration, _gameCache, _clientState, _commandManager,
-                textureProvider, discardHelperIpc, _allaganToolsIpc, _pluginLog);
+                textureProvider, _allaganToolsIpc, _pluginLog);
         _windowSystem.AddWindow(_configWindow);
 
         ECommonsMain.Init(_pluginInterface, this);

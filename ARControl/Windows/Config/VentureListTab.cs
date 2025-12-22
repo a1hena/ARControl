@@ -5,7 +5,6 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using System.Text.RegularExpressions;
-using ARControl.External;
 using ARControl.GameData;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
@@ -26,7 +25,6 @@ internal sealed class VentureListTab(
     Configuration configuration,
     GameCache gameCache,
     ITextureProvider textureProvider,
-    DiscardHelperIpc discardHelperIpc,
     IPluginLog pluginLog) : ITab
 {
     private static readonly string[] StockingTypeLabels = ["Collect Once", "Keep in Stock"];
@@ -58,7 +56,6 @@ internal sealed class VentureListTab(
             return;
 
         Configuration.ItemList? listToDelete = null;
-        IReadOnlySet<uint> itemsToDiscard = discardHelperIpc.GetItemsToDiscard();
         foreach (var list in configuration.ItemLists)
         {
             ImGui.PushID($"List{list.Id}");
@@ -84,7 +81,7 @@ internal sealed class VentureListTab(
             if (ImGui.CollapsingHeader(label))
             {
                 ImGui.Indent(configWindow.MainIndentSize);
-                DrawVentureListItemSelection(list, itemsToDiscard);
+                DrawVentureListItemSelection(list);
                 ImGui.Unindent(configWindow.MainIndentSize);
             }
 
@@ -172,7 +169,7 @@ internal sealed class VentureListTab(
         }
     }
 
-    private void DrawVentureListItemSelection(Configuration.ItemList list, IReadOnlySet<uint> itemsToDiscard)
+    private void DrawVentureListItemSelection(Configuration.ItemList list)
     {
         DrawVentureListItemFilter(list);
 
@@ -193,9 +190,7 @@ internal sealed class VentureListTab(
             var ventures = gameCache.Ventures.Where(x => x.ItemId == item.ItemId).ToList();
             var venture = ventures.First();
 
-            if (itemsToDiscard.Contains(venture.ItemId))
-                DrawWarning(WarningIcon, "This item will be automatically discarded by 'Discard Helper'.");
-            else if (item.ItemId is >= 2 and <= 13 && item.RemainingQuantity >= 10000)
+            if (item.ItemId is >= 2 and <= 13 && item.RemainingQuantity >= 10000)
             {
                 if (list.Type == Configuration.ListType.CollectOneTime || list.CheckRetainerInventory)
                     DrawWarning(ExcessCrystalsIcon,
@@ -239,8 +234,7 @@ internal sealed class VentureListTab(
             int oldIndex = list.Items.IndexOf(draggedItem);
 
             var (topLeft, bottomRight) = itemPositions[oldIndex];
-            if (!itemsToDiscard.Contains(draggedItem.ItemId))
-                topLeft += new Vector2(configWindow.MainIndentSize, 0);
+            topLeft += new Vector2(configWindow.MainIndentSize, 0);
             ImGui.GetWindowDrawList().AddRect(topLeft, bottomRight, ImGui.GetColorU32(ImGuiColors.DalamudGrey), 3f,
                 ImDrawFlags.RoundCornersAll);
 
