@@ -170,10 +170,10 @@ public sealed partial class AutoRetainerControlPlugin : IDalamudPlugin
                 itemListIds = group.ItemListIds;
             }
 
-            var itemLists = itemListIds.Where(listId => listId != Guid.Empty)
+            var itemLists = itemListIds
+                .Where(listId => listId != Guid.Empty)
                 .Select(listId => _configuration.ItemLists.SingleOrDefault(x => x.Id == listId))
-                .Where(list => list != null)
-                .Cast<Configuration.ItemList>()
+                .OfType<Configuration.ItemList>()
                 .ToList();
             InventoryManager* inventoryManager = InventoryManager.Instance();
             foreach (var list in itemLists)
@@ -334,7 +334,7 @@ public sealed partial class AutoRetainerControlPlugin : IDalamudPlugin
     /// </remarks>
     private Dictionary<uint, int> CalculateVenturesInProgress(Configuration.CharacterConfiguration character)
     {
-        Dictionary<uint, int> inProgress = new Dictionary<uint, int>();
+        Dictionary<uint, int> inProgress = [];
         foreach (var retainer in character.Retainers)
         {
             if (retainer.Managed && retainer.HasVenture && retainer.LastVenture != 0)

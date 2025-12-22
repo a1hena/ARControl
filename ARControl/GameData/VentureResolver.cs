@@ -3,40 +3,31 @@ using Dalamud.Plugin.Services;
 
 namespace ARControl.GameData;
 
-internal sealed class VentureResolver
+internal sealed class VentureResolver(GameCache gameCache, IPluginLog pluginLog)
 {
-    private readonly GameCache _gameCache;
-    private readonly IPluginLog _pluginLog;
-
-    public VentureResolver(GameCache gameCache, IPluginLog pluginLog)
-    {
-        _gameCache = gameCache;
-        _pluginLog = pluginLog;
-    }
-
     public (Venture?, VentureReward?) ResolveVenture(Configuration.CharacterConfiguration character,
         Configuration.RetainerConfiguration retainer, uint itemId)
     {
-        var venture = _gameCache.Ventures
+        var venture = gameCache.Ventures
             .Where(x => retainer.Level >= x.Level)
             .FirstOrDefault(x => x.ItemId == itemId && x.MatchesJob(retainer.Job));
         if (venture == null)
         {
-            _pluginLog.Debug($"No applicable venture found for itemId {itemId} as {retainer.Job}");
+            pluginLog.Debug($"No applicable venture found for itemId {itemId} as {retainer.Job}");
             return (null, null);
         }
 
         if (venture.CategoryType != EVentureCategoryType.DoWM)
         {
-            var itemToGather = _gameCache.ItemsToGather.FirstOrDefault(x => x.ItemId == itemId);
+            var itemToGather = gameCache.ItemsToGather.FirstOrDefault(x => x.ItemId == itemId);
             if (itemToGather != null && !character.GatheredItems.Contains(itemToGather.GatheredItemId))
             {
-                _pluginLog.Information($"Character hasn't gathered {venture.Name} yet");
+                pluginLog.Information($"Character hasn't gathered {venture.Name} yet");
                 return (null, null);
             }
         }
 
-        _pluginLog.Debug(
+        pluginLog.Debug(
             $"Found venture {venture.Name}, row = {venture.RowId}, checking if we have high enough stats");
         VentureReward? reward = null;
         if (venture.CategoryType is EVentureCategoryType.MIN or EVentureCategoryType.BTN)

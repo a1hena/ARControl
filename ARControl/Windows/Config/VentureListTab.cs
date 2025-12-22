@@ -21,28 +21,27 @@ using ECommons.ImGuiMethods;
 
 namespace ARControl.Windows.Config;
 
-internal sealed class VentureListTab : ITab
+internal sealed class VentureListTab(
+    ConfigWindow configWindow,
+    Configuration configuration,
+    GameCache gameCache,
+    ITextureProvider textureProvider,
+    DiscardHelperIpc discardHelperIpc,
+    IPluginLog pluginLog) : ITab
 {
     private static readonly string[] StockingTypeLabels = ["Collect Once", "Keep in Stock"];
 
     private static readonly string[] PriorityLabels =
-        { "Collect in order of the list", "Collect item with lowest inventory first" };
+        ["Collect in order of the list", "Collect item with lowest inventory first"];
 
     private static readonly Regex CountAndName = new(@"^(\d{1,5})x?\s+(.*)$", RegexOptions.Compiled);
     private const FontAwesomeIcon WarningIcon = FontAwesomeIcon.ExclamationCircle;
     private const FontAwesomeIcon ExcessCrystalsIcon = FontAwesomeIcon.Diamond;
 
-    private readonly ConfigWindow _configWindow;
-    private readonly Configuration _configuration;
-    private readonly GameCache _gameCache;
-    private readonly ITextureProvider _textureProvider;
-    private readonly DiscardHelperIpc _discardHelperIpc;
-    private readonly IPluginLog _pluginLog;
-
     private string _searchString = string.Empty;
     private (Guid, Guid)? _draggedItem;
 
-    private readonly Dictionary<Guid, TemporaryConfig> _currentEditPopups = new();
+    private readonly Dictionary<Guid, TemporaryConfig> _currentEditPopups = [];
 
     private TemporaryConfig _newList = new()
     {
@@ -52,17 +51,6 @@ internal sealed class VentureListTab : ITab
         CheckRetainerInventory = false,
     };
 
-    public VentureListTab(ConfigWindow configWindow, Configuration configuration, GameCache gameCache,
-        ITextureProvider textureProvider, DiscardHelperIpc discardHelperIpc, IPluginLog pluginLog)
-    {
-        _configWindow = configWindow;
-        _configuration = configuration;
-        _gameCache = gameCache;
-        _textureProvider = textureProvider;
-        _discardHelperIpc = discardHelperIpc;
-        _pluginLog = pluginLog;
-    }
-
     public void Draw()
     {
         using var tab = ImRaii.TabItem("Venture Lists###TabVentureLists");
@@ -70,8 +58,8 @@ internal sealed class VentureListTab : ITab
             return;
 
         Configuration.ItemList? listToDelete = null;
-        IReadOnlySet<uint> itemsToDiscard = _discardHelperIpc.GetItemsToDiscard();
-        foreach (var list in _configuration.ItemLists)
+        IReadOnlySet<uint> itemsToDiscard = discardHelperIpc.GetItemsToDiscard();
+        foreach (var list in configuration.ItemLists)
         {
             ImGui.PushID($"List{list.Id}");
 
@@ -95,9 +83,9 @@ internal sealed class VentureListTab : ITab
 
             if (ImGui.CollapsingHeader(label))
             {
-                ImGui.Indent(_configWindow.MainIndentSize);
+                ImGui.Indent(configWindow.MainIndentSize);
                 DrawVentureListItemSelection(list, itemsToDiscard);
-                ImGui.Unindent(_configWindow.MainIndentSize);
+                ImGui.Unindent(configWindow.MainIndentSize);
             }
 
             ImGui.PopID();
@@ -105,8 +93,8 @@ internal sealed class VentureListTab : ITab
 
         if (listToDelete != null)
         {
-            _configuration.ItemLists.Remove(listToDelete);
-            _configWindow.ShouldSave();
+            configuration.ItemLists.Remove(listToDelete);
+            configWindow.ShouldSave();
         }
 
         ImGui.Separator();
@@ -116,12 +104,12 @@ internal sealed class VentureListTab : ITab
 
     private void DrawVentureListEditorPopup(Configuration.ItemList list, ref Configuration.ItemList? listToDelete)
     {
-        var assignedCharacters = _configuration.Characters
+        var assignedCharacters = configuration.Characters
             .Where(x => x.Type == Configuration.CharacterType.Standalone && x.ItemListIds.Contains(list.Id))
             .OrderBy(x => x.WorldName)
             .ThenBy(x => x.LocalContentId)
             .ToList();
-        var assignedGroups = _configuration.CharacterGroups
+        var assignedGroups = configuration.CharacterGroups
             .Where(x => x.ItemListIds.Contains(list.Id))
             .ToList();
         if (_currentEditPopups.TryGetValue(list.Id, out TemporaryConfig? temporaryConfig) &&
@@ -153,7 +141,7 @@ internal sealed class VentureListTab : ITab
                 }
 
                 ImGui.CloseCurrentPopup();
-                _configWindow.ShouldSave();
+                configWindow.ShouldSave();
             }
             else
             {
@@ -198,11 +186,11 @@ internal sealed class VentureListTab : ITab
         for (int i = 0; i < list.Items.Count; ++i)
         {
             Vector2 topLeft = ImGui.GetCursorScreenPos() +
-                              new Vector2(-_configWindow.MainIndentSize, -ImGui.GetStyle().ItemSpacing.Y / 2);
+                              new Vector2(-configWindow.MainIndentSize, -ImGui.GetStyle().ItemSpacing.Y / 2);
 
             var item = list.Items[i];
             ImGui.PushID($"QueueItem{item.InternalId}");
-            var ventures = _gameCache.Ventures.Where(x => x.ItemId == item.ItemId).ToList();
+            var ventures = gameCache.Ventures.Where(x => x.ItemId == item.ItemId).ToList();
             var venture = ventures.First();
 
             if (itemsToDiscard.Contains(venture.ItemId))
@@ -217,7 +205,7 @@ internal sealed class VentureListTab : ITab
                     DrawWarning(WarningIcon, "You can never have this many of a shard or crystal in your inventory.");
             }
 
-            var icon = _textureProvider.GetFromGameIcon(new GameIconLookup(venture.IconId));
+            var icon = textureProvider.GetFromGameIcon(new GameIconLookup(venture.IconId));
             ImGui.Image(icon.GetWrapOrEmpty().Handle, new Vector2(ImGui.GetFrameHeight()));
             ImGui.SameLine(0, ImGui.GetStyle().FramePadding.X);
 
@@ -227,7 +215,7 @@ internal sealed class VentureListTab : ITab
                     ref quantity, 100))
             {
                 item.RemainingQuantity = quantity;
-                _configWindow.ShouldSave();
+                configWindow.ShouldSave();
             }
 
             DrawDragDropIcons(list, item);
@@ -237,7 +225,7 @@ internal sealed class VentureListTab : ITab
 
             ImGui.PopID();
 
-            Vector2 bottomRight = new Vector2(topLeft.X + width + _configWindow.MainIndentSize,
+            Vector2 bottomRight = new Vector2(topLeft.X + width + configWindow.MainIndentSize,
                 ImGui.GetCursorScreenPos().Y - ImGui.GetStyle().ItemSpacing.Y + 2);
             //ImGui.GetWindowDrawList().AddRect(topLeft, bottomRight, ImGui.GetColorU32(i % 2 == 0 ? ImGuiColors.DalamudRed : ImGuiColors.HealerGreen));
             itemPositions.Add((topLeft, bottomRight));
@@ -252,7 +240,7 @@ internal sealed class VentureListTab : ITab
 
             var (topLeft, bottomRight) = itemPositions[oldIndex];
             if (!itemsToDiscard.Contains(draggedItem.ItemId))
-                topLeft += new Vector2(_configWindow.MainIndentSize, 0);
+                topLeft += new Vector2(configWindow.MainIndentSize, 0);
             ImGui.GetWindowDrawList().AddRect(topLeft, bottomRight, ImGui.GetColorU32(ImGuiColors.DalamudGrey), 3f,
                 ImDrawFlags.RoundCornersAll);
 
@@ -267,15 +255,15 @@ internal sealed class VentureListTab : ITab
         if (itemToRemove != null)
         {
             list.Items.Remove(itemToRemove);
-            _configWindow.ShouldSave();
+            configWindow.ShouldSave();
         }
 
         if (itemToAdd != null)
         {
-            _pluginLog.Information($"Updating {itemToAdd.ItemId} → {indexToAdd}");
+            pluginLog.Information($"Updating {itemToAdd.ItemId} → {indexToAdd}");
             list.Items.Remove(itemToAdd);
             list.Items.Insert(indexToAdd, itemToAdd);
-            _configWindow.ShouldSave();
+            configWindow.ShouldSave();
         }
 
         ImGui.Spacing();
@@ -292,7 +280,7 @@ internal sealed class VentureListTab : ITab
         {
             ImGui.PushFont(UiBuilder.IconFont);
             ImGui.SameLine(ImGui.GetContentRegionAvail().X +
-                           _configWindow.MainIndentSize +
+                           configWindow.MainIndentSize +
                            ImGui.GetStyle().WindowPadding.X -
                            ImGui.CalcTextSize(FontAwesomeIcon.ArrowsUpDown.ToIconString()).X -
                            ImGui.CalcTextSize(FontAwesomeIcon.Times.ToIconString()).X -
@@ -318,7 +306,7 @@ internal sealed class VentureListTab : ITab
         {
             ImGui.PushFont(UiBuilder.IconFont);
             ImGui.SameLine(ImGui.GetContentRegionAvail().X +
-                           _configWindow.MainIndentSize +
+                           configWindow.MainIndentSize +
                            ImGui.GetStyle().WindowPadding.X -
                            ImGui.CalcTextSize(FontAwesomeIcon.Times.ToIconString()).X -
                            ImGui.GetStyle().FramePadding.X * 2);
@@ -354,7 +342,7 @@ internal sealed class VentureListTab : ITab
 
             if (save && canSave)
             {
-                _configuration.ItemLists.Add(new Configuration.ItemList
+                configuration.ItemLists.Add(new Configuration.ItemList
                 {
                     Id = Guid.NewGuid(),
                     Name = _newList.Name,
@@ -372,7 +360,7 @@ internal sealed class VentureListTab : ITab
                 };
 
                 ImGui.CloseCurrentPopup();
-                _configWindow.ShouldSave();
+                configWindow.ShouldSave();
             }
 
             ImGui.EndPopup();
@@ -445,7 +433,7 @@ internal sealed class VentureListTab : ITab
                 itemName = _searchString;
             }
 
-            foreach (var filtered in _gameCache.Ventures
+            foreach (var filtered in gameCache.Ventures
                          .Where(x => x.Name.Contains(itemName, StringComparison.OrdinalIgnoreCase))
                          .OrderBy(x => x.Level)
                          .ThenBy(x => x.Name)
@@ -457,7 +445,7 @@ internal sealed class VentureListTab : ITab
                              CategoryNames = x.Select(y => y.CategoryType.ToString())
                          }))
             {
-                var icon = _textureProvider.GetFromGameIcon(new GameIconLookup(filtered.Venture.IconId));
+                var icon = textureProvider.GetFromGameIcon(new GameIconLookup(filtered.Venture.IconId));
                 Vector2 pos = ImGui.GetCursorPos();
                 Vector2 iconSize = new Vector2(ImGui.GetTextLineHeight() + ImGui.GetStyle().ItemSpacing.Y);
 
@@ -486,7 +474,7 @@ internal sealed class VentureListTab : ITab
                         ImGui.CloseCurrentPopup();
                     }
 
-                    _configWindow.ShouldSave();
+                    configWindow.ShouldSave();
                 }
             }
 
@@ -501,7 +489,7 @@ internal sealed class VentureListTab : ITab
         ImGui.BeginDisabled(clipboardItems.Count == 0);
         if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Download, "Import from Clipboard"))
         {
-            _pluginLog.Information($"Importing {clipboardItems.Count} clipboard items");
+            pluginLog.Information($"Importing {clipboardItems.Count} clipboard items");
             foreach (var item in clipboardItems)
             {
                 var existingItem = list.Items.FirstOrDefault(x => x.ItemId == item.ItemId);
@@ -511,7 +499,7 @@ internal sealed class VentureListTab : ITab
                     list.Items.Add(item);
             }
 
-            _configWindow.ShouldSave();
+            configWindow.ShouldSave();
         }
 
         ImGui.EndDisabled();
@@ -527,7 +515,7 @@ internal sealed class VentureListTab : ITab
                 ImGui.Indent();
                 foreach (var item in clipboardItems)
                     ImGui.TextUnformatted(
-                        $"{item.RemainingQuantity}x {_gameCache.Ventures.First(x => item.ItemId == x.ItemId).Name}");
+                        $"{item.RemainingQuantity}x {gameCache.Ventures.First(x => item.ItemId == x.ItemId).Name}");
                 ImGui.Unindent();
             }
             else
@@ -552,7 +540,7 @@ internal sealed class VentureListTab : ITab
             if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Check, "Remove all finished items"))
             {
                 list.Items.RemoveAll(q => q.RemainingQuantity <= 0);
-                _configWindow.ShouldSave();
+                configWindow.ShouldSave();
             }
 
             ImGui.EndDisabled();
@@ -561,7 +549,7 @@ internal sealed class VentureListTab : ITab
 
     private List<Configuration.QueuedItem> ParseClipboardItems()
     {
-        List<Configuration.QueuedItem> clipboardItems = new List<Configuration.QueuedItem>();
+        List<Configuration.QueuedItem> clipboardItems = [];
         try
         {
             string clipboardText = ImGui.GetClipboardText();
@@ -573,7 +561,7 @@ internal sealed class VentureListTab : ITab
                     if (!match.Success)
                         continue;
 
-                    var venture = _gameCache.Ventures.FirstOrDefault(x =>
+                    var venture = gameCache.Ventures.FirstOrDefault(x =>
                         x.Name.Equals(match.Groups[2].Value, StringComparison.OrdinalIgnoreCase));
                     if (venture != null && int.TryParse(match.Groups[1].Value, out int quantity))
                     {
@@ -588,7 +576,7 @@ internal sealed class VentureListTab : ITab
         }
         catch (Exception e)
         {
-            _pluginLog.Warning(e, "Unable to extract clipboard text");
+            pluginLog.Warning(e, "Unable to extract clipboard text");
         }
 
         return clipboardItems;
@@ -598,7 +586,7 @@ internal sealed class VentureListTab : ITab
     {
         return name.Length >= 2 &&
                !name.Contains('%', StringComparison.Ordinal) &&
-               !_configuration.ItemLists.Any(x => x != existingList && name.EqualsIgnoreCase(x.Name));
+               !configuration.ItemLists.Any(x => x != existingList && name.EqualsIgnoreCase(x.Name));
     }
 
     private sealed class TemporaryConfig
