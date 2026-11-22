@@ -36,7 +36,7 @@ internal sealed class ConfigWindow : Window
         IDalamudPluginInterface pluginInterface,
         Configuration configuration,
         GameCache gameCache,
-        IClientState clientState,
+        IPlayerState playerState,
         ICommandManager commandManager,
         ITextureProvider textureProvider,
         AllaganToolsIpc allaganToolsIpc,
@@ -54,7 +54,7 @@ internal sealed class ConfigWindow : Window
             new CharacterGroupTab(this, _configuration),
             new RetainersTab(this, _configuration, textureProvider),
             new InventoryTab(_configuration, allaganToolsIpc, _gameCache, pluginLog),
-            new LockedItemsTab(this, _configuration, clientState, commandManager, gameCache),
+            new LockedItemsTab(this, _configuration, playerState, commandManager, gameCache),
             new MiscTab(this, _configuration),
         ];
 
