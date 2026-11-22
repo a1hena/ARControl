@@ -1,31 +1,33 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Numerics;
-using System.Text;
 using System.Text.RegularExpressions;
+using ARControl.External;
 using ARControl.GameData;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Textures;
-using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Utility;
-using Dalamud.Interface.Utility.Raii;
 using Dalamud.Plugin.Services;
 using ECommons;
 using ECommons.ImGuiMethods;
 
 namespace ARControl.Windows.Config;
 
-internal sealed class VentureListTab(
+/// <summary>
+/// Edits the settings and the items of a single venture list. Embedded in the planner's detail pane.
+/// </summary>
+internal sealed class VentureListEditor(
     ConfigWindow configWindow,
     Configuration configuration,
     GameCache gameCache,
     ITextureProvider textureProvider,
-    IPluginLog pluginLog) : ITab
+    AutoRetainerConfigReader autoRetainerConfigReader,
+    IPluginLog pluginLog)
 {
     private static readonly string[] StockingTypeLabels = ["Collect Once", "Keep in Stock"];
 
@@ -36,140 +38,81 @@ internal sealed class VentureListTab(
     private const FontAwesomeIcon WarningIcon = FontAwesomeIcon.ExclamationCircle;
     private const FontAwesomeIcon ExcessCrystalsIcon = FontAwesomeIcon.Diamond;
 
+    private readonly Dictionary<Guid, string> _nameBuffers = [];
     private string _searchString = string.Empty;
     private (Guid, Guid)? _draggedItem;
 
-    private readonly Dictionary<Guid, TemporaryConfig> _currentEditPopups = [];
-
-    private TemporaryConfig _newList = new()
+    public void DrawSettings(Configuration.ItemList list)
     {
-        Name = string.Empty,
-        ListType = Configuration.ListType.CollectOneTime,
-        ListPriority = Configuration.ListPriority.InOrder,
-        CheckRetainerInventory = false,
-    };
+        float width = 300 * ImGuiHelpers.GlobalScale;
 
-    public void Draw()
-    {
-        using var tab = ImRaii.TabItem("Venture Lists###TabVentureLists");
-        if (!tab)
-            return;
-
-        Configuration.ItemList? listToDelete = null;
-        foreach (var list in configuration.ItemLists)
+        string name = _nameBuffers.GetValueOrDefault(list.Id, list.Name);
+        ImGui.SetNextItemWidth(width);
+        if (ImGui.InputText("Name##ListName", ref name, 64))
         {
-            ImGui.PushID($"List{list.Id}");
-
-            if (ImGuiComponents.IconButton(FontAwesomeIcon.Cog))
+            if (IsValidListName(name, list))
             {
-                _currentEditPopups[list.Id] = new TemporaryConfig
-                {
-                    Name = list.Name,
-                    ListType = list.Type,
-                    ListPriority = list.Priority,
-                    CheckRetainerInventory = list.CheckRetainerInventory,
-                };
-                ImGui.OpenPopup($"##EditList{list.Id}");
-            }
-
-            DrawVentureListEditorPopup(list, ref listToDelete);
-
-            ImGui.SameLine();
-
-            string label = $"{list.Name} {list.GetIcon()}";
-
-            if (ImGui.CollapsingHeader(label))
-            {
-                ImGui.Indent(configWindow.MainIndentSize);
-                DrawVentureListItemSelection(list);
-                ImGui.Unindent(configWindow.MainIndentSize);
-            }
-
-            ImGui.PopID();
-        }
-
-        if (listToDelete != null)
-        {
-            configuration.ItemLists.Remove(listToDelete);
-            configWindow.ShouldSave();
-        }
-
-        ImGui.Separator();
-        DrawNewVentureList();
-    }
-
-
-    private void DrawVentureListEditorPopup(Configuration.ItemList list, ref Configuration.ItemList? listToDelete)
-    {
-        var assignedCharacters = configuration.Characters
-            .Where(x => x.Type == Configuration.CharacterType.Standalone && x.ItemListIds.Contains(list.Id))
-            .OrderBy(x => x.WorldName)
-            .ThenBy(x => x.LocalContentId)
-            .ToList();
-        var assignedGroups = configuration.CharacterGroups
-            .Where(x => x.ItemListIds.Contains(list.Id))
-            .ToList();
-        if (_currentEditPopups.TryGetValue(list.Id, out TemporaryConfig? temporaryConfig) &&
-            ImGui.BeginPopup($"##EditList{list.Id}"))
-        {
-            var (save, canSave) = DrawVentureListEditor(temporaryConfig, list);
-            ImGui.BeginDisabled(!canSave || (list.Name == temporaryConfig.Name &&
-                                             list.Type == temporaryConfig.ListType &&
-                                             list.Priority == temporaryConfig.ListPriority &&
-                                             list.CheckRetainerInventory ==
-                                             temporaryConfig.CheckRetainerInventory));
-            save |= ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Save, "Save");
-            ImGui.EndDisabled();
-
-            if (save && canSave)
-            {
-                list.Name = temporaryConfig.Name;
-                list.Type = temporaryConfig.ListType;
-
-                if (list.Type == Configuration.ListType.CollectOneTime)
-                {
-                    list.Priority = Configuration.ListPriority.InOrder;
-                    list.CheckRetainerInventory = false;
-                }
-                else
-                {
-                    list.Priority = temporaryConfig.ListPriority;
-                    list.CheckRetainerInventory = temporaryConfig.CheckRetainerInventory;
-                }
-
-                ImGui.CloseCurrentPopup();
+                list.Name = name;
+                _nameBuffers.Remove(list.Id);
                 configWindow.ShouldSave();
             }
             else
-            {
-                ImGui.SameLine();
-                ImGui.BeginDisabled(assignedCharacters.Count > 0 || assignedGroups.Count > 0);
-                if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Times, "Delete"))
-                {
-                    listToDelete = list;
-                    ImGui.CloseCurrentPopup();
-                }
+                _nameBuffers[list.Id] = name;
+        }
 
-                ImGui.EndDisabled();
-                if ((assignedCharacters.Count > 0 || assignedGroups.Count > 0) &&
-                    ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                {
-                    ImGui.BeginTooltip();
-                    ImGui.Text(
-                        $"Remove this list from the {assignedCharacters.Count} character(s) and {assignedGroups.Count} group(s) using it before deleting it.");
-                    foreach (var character in assignedCharacters)
-                        ImGui.BulletText($"{character.CharacterName} @ {character.WorldName}");
-                    foreach (var group in assignedGroups)
-                        ImGui.BulletText($"{group.Name}");
-                    ImGui.EndTooltip();
-                }
+        if (_nameBuffers.ContainsKey(list.Id))
+            ImGui.TextColored(ImGuiColors.DalamudRed,
+                "Names need at least 2 characters, no '%' and must be unique. The change is not saved yet.");
+
+        int type = (int)list.Type;
+        ImGui.SetNextItemWidth(width);
+        if (ImGui.Combo("Type##ListType", ref type, StockingTypeLabels, StockingTypeLabels.Length))
+        {
+            list.Type = (Configuration.ListType)type;
+            if (list.Type == Configuration.ListType.CollectOneTime)
+            {
+                list.Priority = Configuration.ListPriority.InOrder;
+                list.CheckRetainerInventory = false;
             }
 
-            ImGui.EndPopup();
+            configWindow.ShouldSave();
+        }
+
+        ImGui.SameLine();
+        ImGuiComponents.HelpMarker(
+            "Collect Once: the quantities are shared by everyone using this list, and count down as retainers bring items back.\n\n" +
+            "Keep in Stock: each character on its own collects until its inventory holds the quantity.");
+
+        if (list.Type == Configuration.ListType.KeepStocked)
+        {
+            int priority = (int)list.Priority;
+            ImGui.SetNextItemWidth(width);
+            if (ImGui.Combo("Priority##ListPriority", ref priority, PriorityLabels, PriorityLabels.Length))
+            {
+                list.Priority = (Configuration.ListPriority)priority;
+                configWindow.ShouldSave();
+            }
+
+            bool checkRetainerInventory = list.CheckRetainerInventory;
+            if (ImGui.Checkbox("Also count items in retainer inventories (requires AllaganTools)",
+                    ref checkRetainerInventory))
+            {
+                list.CheckRetainerInventory = checkRetainerInventory;
+                configWindow.ShouldSave();
+            }
         }
     }
 
-    private void DrawVentureListItemSelection(Configuration.ItemList list)
+    public void ForgetUnsavedChanges() => _nameBuffers.Clear();
+
+    public bool IsValidListName(string name, Configuration.ItemList? existingList)
+    {
+        return name.Length >= 2 &&
+               !name.Contains('%', StringComparison.Ordinal) &&
+               !configuration.ItemLists.Any(x => x != existingList && name.EqualsIgnoreCase(x.Name));
+    }
+
+    public void DrawItems(Configuration.ItemList list)
     {
         DrawVentureListItemFilter(list);
 
@@ -199,6 +142,10 @@ internal sealed class VentureListTab(
                 else
                     DrawWarning(WarningIcon, "You can never have this many of a shard or crystal in your inventory.");
             }
+
+            var itemListKind = autoRetainerConfigReader.GetItemListKind(item.ItemId);
+            if (itemListKind != ItemListKind.None)
+                DrawAutoRetainerIndicator(itemListKind);
 
             var icon = textureProvider.GetFromGameIcon(new GameIconLookup(venture.IconId));
             ImGui.Image(icon.GetWrapOrEmpty().Handle, new Vector2(ImGui.GetFrameHeight()));
@@ -308,6 +255,29 @@ internal sealed class VentureListTab(
         }
     }
 
+    private static void DrawAutoRetainerIndicator(ItemListKind listKind)
+    {
+        (FontAwesomeIcon icon, Vector4 color, string tooltip) = listKind switch
+        {
+            ItemListKind.Discard => (FontAwesomeIcon.Trash, ImGuiColors.DalamudRed,
+                "AutoRetainer: This item is marked for automatic discard"),
+            ItemListKind.HardSell => (FontAwesomeIcon.Coins, ImGuiColors.DalamudOrange,
+                "AutoRetainer: This item is marked for automatic NPC sale (Hard Sell)"),
+            ItemListKind.SoftSell => (FontAwesomeIcon.Coins, ImGuiColors.DalamudYellow,
+                "AutoRetainer: This item is marked for automatic NPC sale (Soft Sell)"),
+            ItemListKind.Desynth => (FontAwesomeIcon.Recycle, ImGuiColors.ParsedPurple,
+                "AutoRetainer: This item is marked for automatic desynthesis"),
+            ItemListKind.Protect => (FontAwesomeIcon.Shield, ImGuiColors.HealerGreen,
+                "AutoRetainer: This item is protected from automatic actions"),
+            _ => (FontAwesomeIcon.None, Vector4.Zero, string.Empty)
+        };
+
+        if (icon == FontAwesomeIcon.None)
+            return;
+
+        DrawWarning(icon, tooltip, color);
+    }
+
     private static void DrawWarning(FontAwesomeIcon icon, string tooltip, Vector4? color = null)
     {
         ImGui.PushFont(UiBuilder.IconFont);
@@ -319,88 +289,6 @@ internal sealed class VentureListTab(
 
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip(tooltip);
-    }
-
-    private void DrawNewVentureList()
-    {
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Plus, "Add Venture List"))
-            ImGui.OpenPopup("##AddList");
-
-        if (ImGui.BeginPopup("##AddList"))
-        {
-            (bool save, bool canSave) = DrawVentureListEditor(_newList, null);
-
-            ImGui.BeginDisabled(!canSave);
-            save |= ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Save, "Save");
-            ImGui.EndDisabled();
-
-            if (save && canSave)
-            {
-                configuration.ItemLists.Add(new Configuration.ItemList
-                {
-                    Id = Guid.NewGuid(),
-                    Name = _newList.Name,
-                    Type = _newList.ListType,
-                    Priority = _newList.ListPriority,
-                    CheckRetainerInventory = _newList.CheckRetainerInventory,
-                });
-
-                _newList = new()
-                {
-                    Name = string.Empty,
-                    ListType = Configuration.ListType.CollectOneTime,
-                    ListPriority = Configuration.ListPriority.InOrder,
-                    CheckRetainerInventory = false,
-                };
-
-                ImGui.CloseCurrentPopup();
-                configWindow.ShouldSave();
-            }
-
-            ImGui.EndPopup();
-        }
-    }
-
-    private (bool Save, bool CanSave) DrawVentureListEditor(TemporaryConfig temporaryConfig,
-        Configuration.ItemList? list)
-    {
-        ImGui.SetNextItemWidth(375 * ImGuiHelpers.GlobalScale);
-        string listName = temporaryConfig.Name;
-        bool save = ImGui.InputTextWithHint("", "List Name...", ref listName, 64,
-            ImGuiInputTextFlags.EnterReturnsTrue);
-        bool canSave = IsValidListName(listName, list);
-        temporaryConfig.Name = listName;
-
-        ImGui.PushID($"Type{list?.Id ?? Guid.Empty}");
-        ImGui.SetNextItemWidth(375 * ImGuiHelpers.GlobalScale);
-        int type = (int)temporaryConfig.ListType;
-        if (ImGui.Combo("", ref type, StockingTypeLabels, StockingTypeLabels.Length))
-        {
-            temporaryConfig.ListType = (Configuration.ListType)type;
-            if (temporaryConfig.ListType == Configuration.ListType.CollectOneTime)
-                temporaryConfig.ListPriority = Configuration.ListPriority.InOrder;
-        }
-
-        ImGui.PopID();
-
-        if (temporaryConfig.ListType == Configuration.ListType.KeepStocked)
-        {
-            ImGui.PushID($"Priority{list?.Id ?? Guid.Empty}");
-            ImGui.SetNextItemWidth(375 * ImGuiHelpers.GlobalScale);
-            int priority = (int)temporaryConfig.ListPriority;
-            if (ImGui.Combo("", ref priority, PriorityLabels, PriorityLabels.Length))
-                temporaryConfig.ListPriority = (Configuration.ListPriority)priority;
-            ImGui.PopID();
-
-            ImGui.PushID($"CheckRetainerInventory{list?.Id ?? Guid.Empty}");
-            bool checkRetainerInventory = temporaryConfig.CheckRetainerInventory;
-            if (ImGui.Checkbox("Check Retainer Inventory for items (requires AllaganTools)",
-                    ref checkRetainerInventory))
-                temporaryConfig.CheckRetainerInventory = checkRetainerInventory;
-            ImGui.PopID();
-        }
-
-        return (save, canSave);
     }
 
     private void DrawVentureListItemFilter(Configuration.ItemList list)
@@ -576,18 +464,5 @@ internal sealed class VentureListTab(
         return clipboardItems;
     }
 
-    private bool IsValidListName(string name, Configuration.ItemList? existingList)
-    {
-        return name.Length >= 2 &&
-               !name.Contains('%', StringComparison.Ordinal) &&
-               !configuration.ItemLists.Any(x => x != existingList && name.EqualsIgnoreCase(x.Name));
-    }
 
-    private sealed class TemporaryConfig
-    {
-        public required string Name { get; set; }
-        public Configuration.ListType ListType { get; set; }
-        public Configuration.ListPriority ListPriority { get; set; }
-        public bool CheckRetainerInventory { get; set; }
-    }
 }

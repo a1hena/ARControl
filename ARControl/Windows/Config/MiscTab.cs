@@ -52,7 +52,7 @@ internal sealed class MiscTab : ITab
         }
 
         bool showContents = _configuration.ConfigUiOptions.ShowVentureListContents;
-        if (ImGui.Checkbox("Show Venture List preview in Groups/Retainer tabs", ref showContents))
+        if (ImGui.Checkbox("Show venture list contents in group and character details", ref showContents))
         {
             _configuration.ConfigUiOptions.ShowVentureListContents = showContents;
             _configWindow.ShouldSave();

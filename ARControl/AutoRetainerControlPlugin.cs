@@ -36,6 +36,7 @@ public sealed partial class AutoRetainerControlPlugin : IDalamudPlugin
     private readonly GameCache _gameCache;
     private readonly VentureResolver _ventureResolver;
     private readonly AllaganToolsIpc _allaganToolsIpc;
+    private readonly AutoRetainerConfigReader _autoRetainerConfigReader;
     private readonly ConfigWindow _configWindow;
     private readonly AutoRetainerApi _autoRetainerApi;
     private readonly AutoRetainerReflection _autoRetainerReflection;
@@ -59,9 +60,10 @@ public sealed partial class AutoRetainerControlPlugin : IDalamudPlugin
         _gameCache = new GameCache(dataManager);
         _ventureResolver = new VentureResolver(_gameCache, _pluginLog);
         _allaganToolsIpc = new AllaganToolsIpc(pluginInterface, pluginLog);
+        _autoRetainerConfigReader = new AutoRetainerConfigReader(pluginInterface, pluginLog);
         _configWindow =
             new ConfigWindow(_pluginInterface, _configuration, _gameCache, _playerState, _commandManager,
-                textureProvider, _allaganToolsIpc, _pluginLog);
+                textureProvider, _allaganToolsIpc, _autoRetainerConfigReader, _pluginLog);
         _windowSystem.AddWindow(_configWindow);
 
         ECommonsMain.Init(_pluginInterface, this, Module.DalamudReflector);
@@ -447,6 +449,7 @@ public sealed partial class AutoRetainerControlPlugin : IDalamudPlugin
         _pluginInterface.UiBuilder.OpenConfigUi -= _configWindow.Toggle;
         _pluginInterface.UiBuilder.Draw -= _windowSystem.Draw;
 
+        _autoRetainerConfigReader.Dispose();
         _autoRetainerApi.Dispose();
         ECommonsMain.Dispose();
     }

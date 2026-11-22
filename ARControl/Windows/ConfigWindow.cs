@@ -40,8 +40,9 @@ internal sealed class ConfigWindow : Window
         ICommandManager commandManager,
         ITextureProvider textureProvider,
         AllaganToolsIpc allaganToolsIpc,
+        AutoRetainerConfigReader autoRetainerConfigReader,
         IPluginLog pluginLog)
-        : base($"ARC {SeIconChar.Collectible.ToIconString()}###ARControlConfig")
+        : base($"ARC {SeIconChar.Collectible.ToIconString()} v{GetDisplayVersion()}###ARControlConfig")
     {
         _pluginInterface = pluginInterface;
         _configuration = configuration;
@@ -50,9 +51,7 @@ internal sealed class ConfigWindow : Window
 
         _tabs =
         [
-            new VentureListTab(this, _configuration, gameCache, textureProvider, pluginLog),
-            new CharacterGroupTab(this, _configuration),
-            new RetainersTab(this, _configuration, textureProvider),
+            new PlannerTab(this, _configuration, gameCache, textureProvider, autoRetainerConfigReader, pluginLog),
             new InventoryTab(_configuration, allaganToolsIpc, _gameCache, pluginLog),
             new LockedItemsTab(this, _configuration, playerState, commandManager, gameCache),
             new MiscTab(this, _configuration),
@@ -60,9 +59,17 @@ internal sealed class ConfigWindow : Window
 
         SizeConstraints = new()
         {
-            MinimumSize = new Vector2(480, 300),
+            MinimumSize = new Vector2(640, 360),
             MaximumSize = new Vector2(9999, 9999),
         };
+        Size = new Vector2(860, 600);
+        SizeCondition = ImGuiCond.FirstUseEver;
+    }
+
+    private static string GetDisplayVersion()
+    {
+        var version = typeof(ConfigWindow).Assembly.GetName().Version;
+        return version == null ? "?" : version.ToString(3);
     }
 
     public float MainIndentSize { get; private set; } = 1;
@@ -235,7 +242,7 @@ internal sealed class ConfigWindow : Window
 
         var unusedLists = itemLists.Where(x => x.Id != Guid.Empty && !selectedLists.Contains(x.Id)).ToList();
         ImGui.BeginDisabled(unusedLists.Count == 0);
-        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Plus, "Add Venture List to this Group"))
+        if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Plus, "Add Venture List"))
             ImGui.OpenPopup($"##AddItem{id}");
 
         if (ImGui.BeginPopupContextItem($"##AddItem{id}", ImGuiPopupFlags.NoOpenOverItems))
