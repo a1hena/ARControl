@@ -64,7 +64,7 @@ public sealed partial class AutoRetainerControlPlugin : IDalamudPlugin
                 textureProvider, _allaganToolsIpc, _pluginLog);
         _windowSystem.AddWindow(_configWindow);
 
-        ECommonsMain.Init(_pluginInterface, this);
+        ECommonsMain.Init(_pluginInterface, this, Module.DalamudReflector);
         _autoRetainerApi = new();
         _autoRetainerReflection = new AutoRetainerReflection(pluginLog, _autoRetainerApi);
 
