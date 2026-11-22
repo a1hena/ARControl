@@ -1,12 +1,13 @@
-<Project Sdk="Dalamud.NET.Sdk/14.0.0">
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
     <PropertyGroup>
-        <Version>14.2</Version>
+        <Version>15.0</Version>
         <OutputPath>dist</OutputPath>
     </PropertyGroup>
 
     <Import Project="RenameZip.targets"/>
 
     <ItemGroup>
+        <PackageReference Include="ECommons" Version="3.2.1.26" />
         <ProjectReference Include="..\AutoRetainerAPI\AutoRetainerAPI\AutoRetainerAPI.csproj" />
     </ItemGroup>
 </Project>
