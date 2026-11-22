@@ -1,0 +1,55 @@
+name: check
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    # release ワークフローと同じ土台で組む。片方だけ通る状態を作らない。
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download Dalamud
+        run: |
+          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile dalamud.zip
+          Expand-Archive -Force dalamud.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
+
+      - name: Build
+        shell: bash
+        run: dotnet build ARControl.sln -c Release
+
+      # publish API が要求する項目が manifest に入っているかを、配信する前に確かめる。
+      # 欠けていると release ワークフローが 400 で落ちる。
+      - name: Inspect the packaged manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip=$(find ARControl/dist/ARControl -name 'ARControl-*.zip' -print -quit)
+          test -n "$zip" || { echo "ARControl-*.zip が見つからない"; exit 1; }
+          manifest="$(dirname "$zip")/ARControl.json"
+          echo "artifact: $zip"
+          ls -l "$zip"
+          echo "manifest: $manifest"
+          cat "$manifest"
+          echo
+          for key in InternalName AssemblyVersion DalamudApiLevel; do
+            python -c "import json,sys; d=json.load(open(sys.argv[1], encoding='utf-8-sig')); sys.exit(0 if d.get(sys.argv[2]) not in (None, '') else 1)" "$manifest" "$key" \
+              || { echo "manifest に $key が無い"; exit 1; }
+          done
+          echo "required fields: ok"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ARControl
+          path: ARControl/dist/ARControl/*
+          if-no-files-found: error
+          retention-days: 3
