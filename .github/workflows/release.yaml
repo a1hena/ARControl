@@ -5,128 +5,13 @@ on:
     branches: [master]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
-# タグと Release の作成が重ならないようにする。
-concurrency:
-  group: release
-  cancel-in-progress: false
-
 jobs:
-  # 直近タグ以降の conventional commit から次の版を決める。
-  # ここではタグを作らない。publish まで通ってから打つ。
-  version:
-    runs-on: ubuntu-latest
-    outputs:
-      new_version: ${{ steps.resolve.outputs.new_version }}
-      new_tag: ${{ steps.resolve.outputs.new_tag }}
-      changelog: ${{ steps.resolve.outputs.changelog }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - id: resolve
-        uses: mathieudutour/github-tag-action@v6.2
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag_prefix: v
-          # 版を上げる理由のあるコミットが無ければ何も出さない。
-          default_bump: false
-          dry_run: true
-
   release:
-    needs: version
-    if: needs.version.outputs.new_version != ''
-    # Dalamud のアセンブリ参照が %AppData% 前提なので Windows で組む。
-    runs-on: windows-latest
-    env:
-      VERSION: ${{ needs.version.outputs.new_version }}
-      TAG: ${{ needs.version.outputs.new_tag }}
-
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Download Dalamud
-        run: |
-          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile dalamud.zip
-          Expand-Archive -Force dalamud.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
-
-      # csproj の <Version> は触らず、ここで注入する。
-      # AssemblyVersion は数値4桁でなければ Dalamud が解釈できない。
-      - name: Build
-        shell: bash
-        run: dotnet build ARControl.sln -c Release -p:Version="$VERSION.0"
-
-      # 成果物は plugin server を通さず R2 へ直接 PUT する。
-      # 1段目で置き場と署名付き URL を貰い、2段目で上げ、3段目で確定させる。
-      - name: Publish to plugin server
-        shell: bash
-        env:
-          API_KEY: ${{ secrets.PLUGIN_SERVER_API_KEY }}
-          SERVER: https://dalamud-plugins.hyuma.dev
-        run: |
-          set -euo pipefail
-          zip="ARControl/dist/ARControl/ARControl-$VERSION.0.zip"
-          test -f "$zip" || { echo "$zip が見つからない"; exit 1; }
-          manifest="$(dirname "$zip")/ARControl.json"
-          echo "artifact: $zip"
-          echo "manifest:"
-          cat "$manifest"
-
-          size=$(stat -c%s "$zip")
-          sha256=$(sha256sum "$zip" | cut -d' ' -f1)
-          md5=$(md5sum "$zip" | cut -d' ' -f1)
-
-          start=$(jq -n \
-            --argjson manifest "$(sed '1s/^\xEF\xBB\xBF//' "$manifest")" \
-            --arg sha256 "$sha256" \
-            --arg md5 "$md5" \
-            --argjson size "$size" \
-            '{manifest: $manifest, sha256: $sha256, md5: $md5, size: $size}' \
-            | curl --fail-with-body --silent --show-error \
-                --header "Authorization: Bearer $API_KEY" \
-                --header "Content-Type: application/json" \
-                --data @- "$SERVER/api/publish/start")
-
-          upload_url=$(jq -r '.uploadUrl' <<<"$start")
-          upload_token=$(jq -r '.uploadToken' <<<"$start")
-          content_md5=$(jq -r '.requiredHeaders["Content-MD5"]' <<<"$start")
-          echo "object key: $(jq -r '.objectKey' <<<"$start")"
-
-          # Content-MD5 は署名に含まれている。違う中身を送れば R2 が断る。
-          curl --fail-with-body --silent --show-error \
-            --request PUT \
-            --header "Content-MD5: $content_md5" \
-            --header "Content-Type: application/zip" \
-            --upload-file "$zip" \
-            "$upload_url"
-
-          jq -n --arg token "$upload_token" '{uploadToken: $token}' \
-            | curl --fail-with-body --silent --show-error \
-                --header "Authorization: Bearer $API_KEY" \
-                --header "Content-Type: application/json" \
-                --data @- "$SERVER/api/publish/complete"
-          echo
-
-      - name: Tag and release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CHANGELOG: ${{ needs.version.outputs.changelog }}
-        run: |
-          set -euo pipefail
-          cp "ARControl/dist/ARControl/ARControl-$VERSION.0.zip" "ARControl-$VERSION.zip"
-          printf '%s\n' "$CHANGELOG" > notes.md
-          gh release create "$TAG" \
-            --target "$GITHUB_SHA" \
-            --title "$TAG" \
-            --notes-file notes.md \
-            "ARControl-$VERSION.zip"
+    uses: a1hena/dalamud-plugin-workflows/.github/workflows/release.yaml@v1
+    permissions:
+      contents: write
+    with:
+      plugin-name: ARControl
+      build-target: ARControl.sln
+    secrets:
+      PLUGIN_SERVER_API_KEY: ${{ secrets.PLUGIN_SERVER_API_KEY }}
